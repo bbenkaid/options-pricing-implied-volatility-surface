@@ -1,0 +1,70 @@
+#Surface de volatilité
+
+#On va afficher le ssmile pour chaque temps, T, celui qui précede dépendait de T1
+#Maintenant on fait varier T
+
+SP500 = yf.Ticker("^SPX")
+QQQ = yf.Ticker("QQQ")
+GLD = yf.Ticker("GLD")
+NVDA = yf.Ticker("NVDA")
+T = list(SP500.options)  #A changer pour observer autres sous-jacents
+df = yf.download("^SPX",start = "2025-01-01", end = ajd)  #A changer pour observer autres sous-jacents
+Close = df.loc[dj,"Close"]
+S = df.loc[dj,"Close"][0]
+
+
+
+K = []
+V = []
+for t in T:
+    Options = SP500.option_chain(t) #A changer pour observer autres sous-jacents
+    Calls = Options.calls
+    Calls = Calls[Calls["bid"]>0]
+    K.append(list(Calls["strike"]))
+    V.append(list(Calls["impliedVolatility"]))
+
+
+from scipy.interpolate import griddata
+
+
+
+# Points de données
+
+Xi,Yi,Zi = [],[],[]
+for i in range(len(T)):
+    T1 = T[i]
+    Tprice = ((pd.Timestamp(T1) - pd.Timestamp(ajd)).days)/365
+    F = S*np.exp(r*Tprice)
+    k = np.log(np.asarray(K[i], float) / F)
+    v = np.asarray(V[i], float)
+    ok = np.isfinite(v) & (v > 0.05) & (v < 1.5) & (np.abs(k) < 0.25)
+    Xi.append(k[ok])
+    Yi.append(np.full(ok.sum(), Tprice))
+    Zi.append(v[ok])
+    
+X = np.concatenate(Xi)
+Y = np.concatenate(Yi)
+Z = np.concatenate(Zi)
+
+# Grille commune, dans les unités des points
+k_grid = np.linspace(-0.2, 0.2, 80)
+t_grid = np.linspace(Y.min(), Y.max(), 60)
+Xg, Yg = np.meshgrid(k_grid, t_grid)
+
+# Interpolation en variance totale w = sigma^2 * T
+W = griddata((X, Y), Z**2 * Y, (Xg, Yg), method="linear", rescale=True)
+Zg = np.sqrt(np.where(Yg > 0, W / Yg, np.nan))
+
+# Surface 3D
+fig = plt.figure(figsize=(12, 7))
+ax = fig.add_subplot(111, projection="3d")
+ax.invert_yaxis()
+ax.plot_surface(Xg, Yg, Zg, cmap="plasma")
+
+ax.set_xlabel("ln(K/F)")
+ax.set_ylabel("T (années)")
+ax.set_zlabel("Volatilité implicite")
+
+fig.suptitle("Volatility surface SP500" )
+plt.show()
+plt.show()
