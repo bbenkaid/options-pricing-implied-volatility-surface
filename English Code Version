@@ -1,0 +1,455 @@
+```python
+# Disclaimer: AI translation of all comments into English; code unchanged.
+
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Oct 23 10:23:58 2026
+
+@author: benal
+"""
+
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import random as rd
+import numpy.random as nr
+from scipy.stats import norm
+from datetime import date, timedelta
+
+# from data_loader import load_spx
+# Calls, Puts, S, T1, Tprice, T, df, dj = load_spx("SPX", target_days=45)
+
+
+# ============================================================
+# 1. DATE SETUP AND MARKET DATA
+# ============================================================
+
+ajd = date.today()
+ajd = pd.Timestamp(ajd)
+
+aujourd_hui = pd.Timestamp.today().normalize()
+dernier_jour_ouvre = aujourd_hui - pd.offsets.BDay(1)
+dj = dernier_jour_ouvre.strftime("%Y-%m-%d")
+
+# Download historical data for the S&P 500 index.
+df = yf.download("^SPX", start="2025-01-01", end=ajd)
+SP500 = yf.Ticker("^SPX")
+
+# Retrieve all available option expiration dates.
+T = list(SP500.options)
+# print(T)
+
+# Select an expiration date for the initial analysis.
+# The third available maturity is selected arbitrarily.
+T1 = T[2]
+
+# Retrieve the option chain for the selected maturity.
+Options = SP500.option_chain(T1)
+
+# Separate calls and puts.
+Calls = Options.calls
+Puts = Options.puts
+
+# Estimate option prices using the bid-ask midpoint.
+Calls["mid"] = (Calls["bid"] + Calls["ask"]) / 2
+Puts["mid"] = (Puts["bid"] + Puts["ask"]) / 2
+
+
+# ============================================================
+# 2. AVAILABLE STRIKES AND UNDERLYING PRICE
+# ============================================================
+
+# Compare the available call strikes with the latest underlying price.
+Close = df.loc[dj, "Close"]
+L = list(Calls.index)
+C = [Close for i in L]
+
+fig1, ax1 = plt.subplots()
+ax1.set_xlim(min(Calls["strike"]), max(Calls["strike"]))
+ax1.plot(Calls["strike"], L, label="Available option strikes")
+ax1.plot(C, L, label="Latest underlying price")
+fig1.suptitle("Available option strikes vs. underlying price")
+plt.legend()
+
+
+# ============================================================
+# 3. CALL OPTION PAYOFF
+# ============================================================
+
+# Optional visualization of call bid, ask, midpoint, and last prices.
+# fig2, ax2 = plt.subplots()
+# Strikes = Calls["strike"]
+# ax2.plot(Strikes, Calls["mid"])
+# ax2.plot(Strikes, Calls["ask"])
+# ax2.plot(Strikes, Calls["bid"])
+# ax2.plot(Strikes, Calls["lastPrice"])
+
+# Select a call option at random.
+i = rd.randint(0, len(L) - 1)
+K = Calls.loc[i, "strike"]
+Price = Calls.loc[i, "mid"]
+
+# Generate a range of possible underlying prices,
+# from 20% to 200% of the current underlying price.
+sj = np.linspace(start=0.2 * Close, stop=2 * Close, num=1000)
+
+# Calculate the call option's profit at expiration.
+payoff = np.maximum(sj - K, 0) - Price
+
+fig, ax = plt.subplots()
+ax.plot(sj, payoff, label="Call option profit at expiration")
+ax.scatter(K, -Price, label="Strike price")
+fig.suptitle("Call option payoff")
+plt.legend()
+
+
+# ============================================================
+# 4. HISTORICAL VOLATILITY ESTIMATION
+# ============================================================
+
+# Estimate historical volatility using the last 60 calendar days
+# of available underlying price data.
+Close = df.loc[df.index > ajd - timedelta(days=60), "Close"]
+
+# Calculate daily logarithmic returns.
+returns = np.log(Close / Close.shift(1)).dropna()
+
+# Estimate daily volatility.
+sigma_daily = returns.std()
+
+# Annualize volatility using 252 trading days per year.
+sigma = sigma_daily * np.sqrt(252)
+
+
+# ============================================================
+# 5. BLACK-SCHOLES CALL PRICING
+# ============================================================
+
+# Price European call options using historical volatility
+# and the Black-Scholes model.
+# A constant risk-free rate of 5% is assumed for simplicity.
+# This assumption does not reflect the actual term structure
+# of interest rates observed in financial markets.
+
+r = 0.05  # Assumed risk-free interest rate
+Tprice = ((pd.Timestamp(T1) - pd.Timestamp(ajd)).days) / 365
+# Time to expiration, expressed in years.
+
+K = K
+S = df.loc[dj, "Close"][0]
+
+
+def Blackscholes(S, K, r, Tprice, sigma):
+    # Calculate the theoretical price of a European call.
+    # The corresponding European put price can be obtained
+    # using put-call parity.
+    d1 = (
+        np.log(S / K) + (r + 0.5 * sigma**2) * Tprice
+    ) / (sigma * np.sqrt(Tprice))
+
+    d2 = d1 - sigma * np.sqrt(Tprice)
+
+    C = S * norm.cdf(d1) - K * np.exp(-r * Tprice) * norm.cdf(d2)
+    return C
+
+
+# For a European put, put-call parity gives:
+# Put = Call - S + K * exp(-r * T)
+
+
+# ============================================================
+# 6. THEORETICAL PRICES VS. MARKET PRICES
+# ============================================================
+
+# Compare Black-Scholes prices with observed call midpoint prices.
+# The model uses historical volatility and a constant risk-free rate.
+
+pricing = []
+priced = []
+
+# Evaluate every available call option for the selected maturity.
+for i in range(0, len(L)):
+    K1 = Calls.loc[i, "strike"]
+    pricing.append(Blackscholes(S, K1, r, Tprice, sigma))
+    priced.append(Calls.loc[i, "mid"])
+
+fig, ax = plt.subplots()
+ax.plot(L, pricing, label="Black-Scholes theoretical prices")
+ax.plot(L, priced, label="Market midpoint prices")
+fig.suptitle("Black-Scholes prices vs. market prices")
+plt.legend()
+
+# Calculate the absolute pricing error relative to the larger
+# of the theoretical and market prices.
+fig4, ax4 = plt.subplots()
+erreur = [abs(p - pv) / max(p, pv) for p, pv in zip(pricing, priced)]
+ax4.plot(erreur, label="Relative pricing error")
+ax4.plot(
+    [np.mean(erreur) for i in range(0, len(L))],
+    label="Mean relative error"
+)
+fig4.suptitle("Pricing errors across available call options")
+plt.legend()
+
+
+# ============================================================
+# 7. IMPLIED VOLATILITY INVERSION
+# ============================================================
+
+# The next step is to infer implied volatility by inverting
+# the Black-Scholes pricing formula.
+# For a given market option price, find the volatility sigma
+# that minimizes the difference between the market price
+# and the Black-Scholes theoretical price.
+
+# Two numerical approaches are considered.
+
+
+# ------------------------------------------------------------
+# 7.1. Grid-search approximation
+# ------------------------------------------------------------
+
+def inversebs(C, S, K, r, Tprice, sigma):
+    # Search over a range of candidate volatility values.
+    implicite = np.linspace(sigma / 10, stop=15 * sigma, num=200)
+
+    L = []
+    for sigma in implicite:
+        L.append(np.absolute(Blackscholes(S, K, r, Tprice, sigma) - C))
+
+    # Return the volatility producing the smallest pricing error.
+    i = np.argmin(L)
+    return implicite[i]
+
+
+# ------------------------------------------------------------
+# 7.2. Brent's root-finding method
+# ------------------------------------------------------------
+
+from scipy.optimize import brentq
+
+
+def inversebs2(C, S, K, r, Tprice):
+    # Define the pricing error as a function of volatility.
+    def f(sigma):
+        return C - Blackscholes(S, K, r, Tprice, sigma)
+
+    # Find a root within the specified volatility interval.
+    # Return NaN if no root can be bracketed in this interval.
+    try:
+        return brentq(f, 0.0001, 5)
+    except ValueError:
+        return np.nan
+
+
+# ------------------------------------------------------------
+# 7.3. Implied volatility comparison and volatility skew
+# ------------------------------------------------------------
+
+# Compare implied volatilities obtained through inversion
+# with the implied volatility estimates provided by yfinance.
+# Historical volatility is used as an additional reference.
+# This comparison can help reveal the volatility skew or smile.
+
+Imp = []
+Imp2 = []
+
+for i in range(len(L)):
+    K = Calls.loc[i, "strike"]
+    C = Calls.loc[i, "mid"]
+
+    # Imp.append(inversebs(C, S, K, r, Tprice, sigma))
+    Imp2.append(inversebs2(C, S, K, r, Tprice))
+
+fig, ax = plt.subplots()
+# ax.plot(Imp, label="Grid-search implied volatility")
+ax.plot(Imp2, label="Brent implied volatility")
+Calls[Calls["impliedVolatility"] > 0.02]["impliedVolatility"].plot()
+fig.suptitle("Implied volatility: numerical inversion vs. yfinance")
+plt.legend()
+
+# Irregular peaks may result from illiquid options, particularly
+# at low strikes, and from wide bid-ask spreads.
+
+
+# ============================================================
+# 8. VARIANCE SWAP PRICING
+# ============================================================
+
+# Estimate the variance swap strike using option prices.
+# The approach approximates an integral over out-of-the-money
+# (OTM) options with a weighted Riemann sum.
+# Each option price is weighted by 1 / K^2 and the strike spacing.
+
+def pricing_varswap(Calls, Puts, T, r, S):
+    # Estimate the forward price using the assumed risk-free rate.
+    F = S * np.exp(r * T)
+
+    # Select OTM calls above the forward and OTM puts below it.
+    Callsotm = Calls[Calls["strike"] > F]
+    Putsotm = Puts[Puts["strike"] < F]
+
+    # Combine and sort the selected OTM options by strike.
+    data = pd.concat([Callsotm, Putsotm], axis=0)
+    data = data.sort_values(by="strike", ascending=True)
+    data = data.reset_index()
+
+    # Approximate the integral using adjacent strike intervals.
+    Pricing = 0
+    for i in range(len(data["strike"]) - 1):
+        K_i = data.loc[i, "strike"]
+        K_iplus = data.loc[i + 1, "strike"]
+        delta = K_iplus - K_i
+        O = data.loc[i, "mid"]
+
+        Pricing += (O / (K_i**2)) * delta
+
+    # Convert the option-price integral approximation
+    # into an annualized variance strike and volatility strike.
+    # The current implementation is an approximation.
+    # Additional terms and conventions may be required
+    # for a standard market variance swap calculation.
+    Kvar = (2 / T) * np.exp(r * T) * Pricing
+    sigmavar = np.sqrt(Kvar) * 100
+
+    return [Kvar, sigmavar]
+
+
+print(pricing_varswap(Calls, Puts, Tprice, r, S))
+
+# Express the variance swap volatility strike as a decimal
+# and compare it with the implied volatility estimates.
+vol = pricing_varswap(Calls, Puts, Tprice, r, S)[1] / 100
+Varswap = [vol for i in range(len(L))]
+
+fig, ax = plt.subplots()
+ax.plot(Imp2, label="Brent implied volatility")
+ax.plot(Varswap, label="Variance swap volatility strike")
+Calls[Calls["impliedVolatility"] > 0.02]["impliedVolatility"].plot()
+fig.suptitle("Implied volatility vs. variance swap volatility strike")
+plt.legend()
+
+
+# ============================================================
+# 9. VOLATILITY SURFACE CONSTRUCTION
+# ============================================================
+
+# Extend the volatility smile analysis across all available
+# expiration dates to construct an initial volatility surface.
+# The following section can also be adapted to other underlyings.
+
+SP500 = yf.Ticker("^SPX")
+QQQ = yf.Ticker("QQQ")
+GLD = yf.Ticker("GLD")
+NVDA = yf.Ticker("NVDA")
+
+# Retrieve all available SPX option expiration dates.
+T = list(SP500.options)
+
+# Download historical S&P 500 index prices again.
+# This can be adapted when analyzing other underlyings.
+df = yf.download("^SPX", start="2025-01-01", end=ajd)
+Close = df.loc[dj, "Close"]
+S = df.loc[dj, "Close"][0]
+
+# Collect strike prices and corresponding implied volatilities
+# for each available expiration date.
+K = []
+V = []
+
+for t in T:
+    # Retrieve the option chain for the current maturity.
+    # Change the ticker above to analyze another underlying.
+    Options = SP500.option_chain(t)
+
+    Calls = Options.calls
+
+    # Keep calls with a positive bid as a basic liquidity filter.
+    Calls = Calls[Calls["bid"] > 0]
+
+    K.append(list(Calls["strike"]))
+    V.append(list(Calls["impliedVolatility"]))
+
+
+# ============================================================
+# 10. DATA PREPARATION FOR SURFACE INTERPOLATION
+# ============================================================
+
+from scipy.interpolate import griddata
+
+# Prepare the observed log-forward moneyness, time to maturity,
+# and implied volatility data points.
+Xi, Yi, Zi = [], [], []
+
+for i in range(len(T)):
+    T1 = T[i]
+
+    # Convert the time to expiration into years.
+    Tprice = ((pd.Timestamp(T1) - pd.Timestamp(ajd)).days) / 365
+
+    # Estimate the forward price under the constant-rate assumption.
+    F = S * np.exp(r * Tprice)
+
+    # Calculate log-forward moneyness: ln(K / F).
+    k = np.log(np.asarray(K[i], float) / F)
+    v = np.asarray(V[i], float)
+
+    # Filter out invalid or extreme implied volatilities
+    # and observations far from the forward price.
+    ok = (
+        np.isfinite(v)
+        & (v > 0.05)
+        & (v < 1.5)
+        & (np.abs(k) < 0.25)
+    )
+
+    Xi.append(k[ok])
+    Yi.append(np.full(ok.sum(), Tprice))
+    Zi.append(v[ok])
+
+# Combine observations from all maturities into single arrays.
+X = np.concatenate(Xi)
+Y = np.concatenate(Yi)
+Z = np.concatenate(Zi)
+
+
+# ============================================================
+# 11. TOTAL VARIANCE INTERPOLATION
+# ============================================================
+
+# Define a common grid for log-forward moneyness and maturity.
+k_grid = np.linspace(-0.2, 0.2, 80)
+t_grid = np.linspace(Y.min(), Y.max(), 60)
+Xg, Yg = np.meshgrid(k_grid, t_grid)
+
+# Interpolate total variance, defined as implied volatility
+# squared multiplied by time to maturity.
+# Total variance is used here as the interpolation variable.
+W = griddata((X, Y), Z**2 * Y, (Xg, Yg), method="linear", rescale=True)
+
+# Convert interpolated total variance back into implied volatility.
+Zg = np.sqrt(np.where(Yg > 0, W / Yg, np.nan))
+
+
+# ============================================================
+# 12. THREE-DIMENSIONAL VOLATILITY SURFACE
+# ============================================================
+
+# Plot the interpolated implied volatility surface.
+fig = plt.figure(figsize=(12, 7))
+ax = fig.add_subplot(111, projection="3d")
+
+# Reverse the maturity axis for visualization.
+ax.invert_yaxis()
+
+ax.plot_surface(Xg, Yg, Zg, cmap="plasma")
+
+ax.set_xlabel("Log-forward moneyness ln(K/F)")
+ax.set_ylabel("Time to maturity (years)")
+ax.set_zlabel("Implied volatility")
+
+fig.suptitle("S&P 500 Implied Volatility Surface")
+plt.show()
+plt.show()
+```
