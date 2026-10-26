@@ -3,6 +3,8 @@ Python project exploring quantitative finance through Black–Scholes option pri
 
 <img width="404" height="445" alt="image" src="https://github.com/user-attachments/assets/97e97a2e-5d91-4b51-83a7-2e507056e373" />
 <img width="404" height="445" alt="image" src="https://github.com/user-attachments/assets/b18547a5-ee77-4770-8c73-04d7da54a108" />
+
+Implied volatility inverted from call mid prices (Brent) across all strikes. The wings are noisy because deep ITM/OTM calls are illiquid; the variance swap strike is shown as the horizontal line.
 <img width="404" height="445" alt="image" src="https://github.com/user-attachments/assets/5c16b3ec-4de6-4c64-adc0-e5fafc73a690" />
 
 # Quantitative Finance in Python
