@@ -2,8 +2,8 @@
 Python project exploring quantitative finance through Black–Scholes option pricing, implied volatility estimation, volatility smile and surface construction, and variance swap pricing. Uses market data, numerical methods, and data visualization to investigate equity index and ETF options.
 
 <img width="404" height="445" alt="image" src="https://github.com/user-attachments/assets/97e97a2e-5d91-4b51-83a7-2e507056e373" />
-<img width="381" height="277" alt="image" src="https://github.com/user-attachments/assets/b18547a5-ee77-4770-8c73-04d7da54a108" />
-<img width="486" height="277" alt="image" src="https://github.com/user-attachments/assets/5c16b3ec-4de6-4c64-adc0-e5fafc73a690" />
+<img width="404" height="445" alt="image" src="https://github.com/user-attachments/assets/b18547a5-ee77-4770-8c73-04d7da54a108" />
+<img width="404" height="445" alt="image" src="https://github.com/user-attachments/assets/5c16b3ec-4de6-4c64-adc0-e5fafc73a690" />
 
 # Quantitative Finance in Python
 
