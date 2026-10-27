@@ -1,11 +1,11 @@
 # Options-pricing-implied-volatility-surface
 Python project exploring quantitative finance through Black–Scholes option pricing, implied volatility estimation, volatility smile and surface construction, and variance swap pricing. Uses market data, numerical methods, and data visualization to investigate equity index and ETF options.
 
-<img width="404" height="445" alt="image" src="https://github.com/user-attachments/assets/97e97a2e-5d91-4b51-83a7-2e507056e373" />
+<img width="406" height="445" alt="image" src="https://github.com/user-attachments/assets/1c58e5d8-3286-4bfc-8097-0ff16449a801" />
 <img width="424" height="280" alt="image" src="https://github.com/user-attachments/assets/d6a9af74-16a4-4048-996a-07f5ca03513c" />
 
 Implied volatility inverted from call mid prices (Brent) across all strikes. The wings are noisy because deep ITM/OTM calls are illiquid; the variance swap strike is shown as the horizontal line.
-<img width="486" height="277" alt="image" src="https://github.com/user-attachments/assets/9b2c6714-ce21-48bc-80ca-2952ef9b2b44" />
+<img width="486" height="277" alt="image" src="https://github.com/user-attachments/assets/91795654-58c0-458a-b17e-be8fa84ec26e" />
 
 # Quantitative Finance in Python
 
